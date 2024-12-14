@@ -1,0 +1,5 @@
+databaseChangeLog:
+  - include:
+      file: db/changelog/chapter-table.xml
+  - include:
+      file: db/changelog/marine-table.xml
