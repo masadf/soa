@@ -1,0 +1,23 @@
+plugins {
+    id 'java'
+}
+
+group = 'itmo'
+version = '0.0.1-SNAPSHOT'
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(17)
+    }
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation("jakarta.ejb:jakarta.ejb-api:4.0.0")
+    implementation("jakarta.ws.rs:jakarta.ws.rs-api:3.0.0")
+    implementation("javax:javaee-api:7.0")
+    implementation 'org.jboss.ejb3:jboss-ejb3-ext-api:2.2.0.Final'
+}

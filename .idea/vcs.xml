@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="VcsDirectoryMappings">
+    <mapping directory="" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/build-soap-web-service-using-sts-gradle" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/dana/eurekaserver" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/dana/lab3spring" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/dana/zuul" vcs="Git" />
+    <mapping directory="$PROJECT_DIR$/frontend" vcs="Git" />
+  </component>
+</project>

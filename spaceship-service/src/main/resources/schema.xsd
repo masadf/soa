@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"
+           xmlns:tns="http://itmo/starshipservice"
+           targetNamespace="http://itmo/starshipservice"
+           elementFormDefault="qualified">
+
+    <xs:element name="addStarshipRequest">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element name="name" type="xs:string"/>
+            </xs:sequence>
+        </xs:complexType>
+    </xs:element>
+
+    <xs:element name="updateStarshipRequest">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element name="id" type="xs:int"/>
+                <xs:element name="name" type="xs:string"/>
+            </xs:sequence>
+        </xs:complexType>
+    </xs:element>
+
+    <xs:element name="getStarshipRequest">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element name="id" type="xs:int"/>
+            </xs:sequence>
+        </xs:complexType>
+    </xs:element>
+
+    <xs:element name="loadToStarshipRequest">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element name="starshipId" type="xs:int"/>
+                <xs:element name="spaceMarineId" type="xs:int"/>
+            </xs:sequence>
+        </xs:complexType>
+    </xs:element>
+
+    <xs:element name="unloadFromStarshipRequest">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element name="starshipId" type="xs:int"/>
+            </xs:sequence>
+        </xs:complexType>
+    </xs:element>
+
+    <xs:element name="deleteStarshipRequest">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element name="id" type="xs:int"/>
+            </xs:sequence>
+        </xs:complexType>
+    </xs:element>
+
+    <xs:element name="ElementCreatedResponse">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element name="id" type="xs:int"/>
+            </xs:sequence>
+        </xs:complexType>
+    </xs:element>
+
+    <xs:simpleType name="AstartesCategory">
+        <xs:restriction base="xs:string">
+            <xs:enumeration value="AGGRESSOR"/>
+            <xs:enumeration value="SUPPRESSOR"/>
+            <xs:enumeration value="TERMINATOR"/>
+            <xs:enumeration value="HELIX"/>
+            <xs:enumeration value="APOTHECARY"/>
+        </xs:restriction>
+    </xs:simpleType>
+
+    <xs:complexType name="spaceMarineDto">
+        <xs:sequence>
+            <xs:element name="id" type="xs:int"/>
+            <xs:element name="name" type="xs:string"/>
+            <xs:element name="category" type="tns:AstartesCategory"/>
+            <xs:element name="health" type="xs:double"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:complexType name="starshipDto">
+        <xs:sequence>
+            <xs:element name="id" type="xs:int" minOccurs="0"/> <!-- Integer может быть null -->
+            <xs:element name="name" type="xs:string"/>
+            <xs:element name="marines" type="tns:spaceMarineDto" minOccurs="0" maxOccurs="unbounded"/>
+        </xs:sequence>
+    </xs:complexType>
+
+    <xs:element name="getStarshipResponse">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element name="starship" type="tns:starshipDto"/> <!-- Integer может быть null -->
+            </xs:sequence>
+        </xs:complexType>
+    </xs:element>
+
+    <xs:element name="getStarshipsResponse">
+        <xs:complexType>
+            <xs:sequence>
+                <xs:element name="starships" type="tns:starshipDto" minOccurs="0" maxOccurs="unbounded"/>
+            </xs:sequence>
+        </xs:complexType>
+    </xs:element>
+
+</xs:schema>

@@ -1,6 +1,7 @@
 package itmo.spaceshipservice.domain.services;
 
 import itmo.spaceshipservice.domain.clients.SpaceMarineClient;
+import itmo.spaceshipservice.domain.dto.AstartesCategory;
 import itmo.spaceshipservice.domain.dto.SpaceMarine;
 import itmo.spaceshipservice.domain.dto.Starship;
 import itmo.spaceshipservice.domain.exceptions.MarineNotFoundException;
@@ -91,6 +92,7 @@ public class StarshipService {
     }
 
     private List<SpaceMarine> findSpaceMarines(Set<Integer> ids) {
+//        return List.of(new SpaceMarine(1, "name", AstartesCategory.AGGRESSOR, 1.0), new SpaceMarine(2, "Edleld", AstartesCategory.HELIX, 3.0));
         return ids.stream().map(marineId -> spaceMarineClient.getSpaceMarine(marineId)).filter(Objects::nonNull).toList();
     }
 }

@@ -1,78 +1,85 @@
 package itmo.spaceshipservice.controllers;
 
 
-import itmo.spaceshipservice.controllers.request.StarshipCreateRequest;
-import itmo.spaceshipservice.controllers.request.StarshipUpdateRequest;
-import itmo.spaceshipservice.controllers.response.ElementCreatedResponse;
-import itmo.spaceshipservice.controllers.response.ErrorResponse;
-import itmo.spaceshipservice.controllers.response.StarshipResponse;
-import itmo.spaceshipservice.domain.exceptions.MarineNotFoundException;
-import itmo.spaceshipservice.domain.exceptions.StarshipNotFoundException;
+import itmo.spaceshipservice.domain.dto.Starship;
 import itmo.spaceshipservice.domain.services.StarshipService;
-import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.HttpStatus;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.ws.server.endpoint.annotation.Endpoint;
+import org.springframework.ws.server.endpoint.annotation.PayloadRoot;
+import org.springframework.ws.server.endpoint.annotation.RequestPayload;
+import org.springframework.ws.server.endpoint.annotation.ResponsePayload;
+import itmo.starshipservice.*;
 
-import java.util.List;
-
-@RestController
-@CrossOrigin(origins = "http://localhost:3000")
+@Endpoint
 public class StarshipController {
     @Autowired
     private StarshipService starshipService;
 
-    @GetMapping("/")
-    List<StarshipResponse> getSpaceships() {
-        return starshipService.getStarships()
-                .stream()
-                .map(el -> new StarshipResponse(el.id(), el.name(), el.marines())).toList();
+    private static final String NAMESPACE_URI = "http://itmo/starshipservice";
+
+    @PayloadRoot(namespace = NAMESPACE_URI, localPart = "getStarshipsRequest")
+    @ResponsePayload
+    GetStarshipsResponse getSpaceships() {
+        var response = new GetStarshipsResponse();
+        starshipService.getStarships()
+                .forEach(el -> response.getStarships().add(mapToStarshipDto(el)));
+
+        return response;
     }
 
-    @PostMapping("/")
-    ElementCreatedResponse addSpaceship(@RequestBody StarshipCreateRequest request) {
-        return new ElementCreatedResponse(starshipService.addStarship(request.name()));
+    @PayloadRoot(namespace = NAMESPACE_URI, localPart = "addStarshipRequest")
+    @ResponsePayload
+    ElementCreatedResponse addSpaceship(@RequestPayload AddStarshipRequest request) {
+        var response = new ElementCreatedResponse();
+        response.setId(starshipService.addStarship(request.getName()));
+        return response;
     }
 
-    @GetMapping("/{id}")
-    StarshipResponse getSpaceship(@PathVariable Integer id) {
-        var starship = starshipService.getStarship(id);
-        return new StarshipResponse(starship.id(), starship.name(), starship.marines());
+    @PayloadRoot(namespace = NAMESPACE_URI, localPart = "getStarshipRequest")
+    @ResponsePayload
+    GetStarshipResponse getSpaceship(@RequestPayload GetStarshipRequest request) {
+        var starship = starshipService.getStarship(request.getId());
+        var response = new GetStarshipResponse();
+        response.setStarship(mapToStarshipDto(starship));
+        return response;
     }
 
-    @DeleteMapping("/{id}")
-    void deleteSpaceship(@PathVariable Integer id, HttpServletResponse response) {
-        starshipService.deleteStarship(id);
-        response.setStatus(204);
+    @PayloadRoot(namespace = NAMESPACE_URI, localPart = "deleteStarshipRequest")
+    void deleteSpaceship(@RequestPayload DeleteStarshipRequest request) {
+        starshipService.deleteStarship(request.getId());
     }
 
-    @PutMapping("/{id}")
-    StarshipResponse updateSpaceship(@PathVariable Integer id, @RequestBody StarshipUpdateRequest request) {
-        var starship = starshipService.updateStarship(id, request.name());
-        return new StarshipResponse(starship.id(), starship.name(), starship.marines());
+    @PayloadRoot(namespace = NAMESPACE_URI, localPart = "updateStarshipRequest")
+    @ResponsePayload
+    GetStarshipResponse updateSpaceship(@RequestPayload UpdateStarshipRequest request) {
+        var starship = starshipService.updateStarship(request.getId(), request.getName());
+        var response = new GetStarshipResponse();
+        response.setStarship(mapToStarshipDto(starship));
+        return response;
     }
 
-    @PatchMapping("/{starship-id}/load/{space-marine-id}")
-    void loadToSpaceship(@PathVariable("starship-id") Integer starshipId, @PathVariable("space-marine-id") Integer spaceMarineId, HttpServletResponse response) {
-        starshipService.loadMarineToStarship(starshipId, spaceMarineId);
-        response.setStatus(204);
+    @PayloadRoot(namespace = NAMESPACE_URI, localPart = "loadToStarshipRequest")
+    void loadToSpaceship(@RequestPayload LoadToStarshipRequest request) {
+        starshipService.loadMarineToStarship(request.getStarshipId(), request.getSpaceMarineId());
     }
 
-    @PatchMapping("/{starship-id}/unload-all")
-    void unloadFromSpaceship(@PathVariable("starship-id") Integer starshipId, HttpServletResponse response) {
-        starshipService.unloadAllFromStarship(starshipId);
-        response.setStatus(204);
+    @PayloadRoot(namespace = NAMESPACE_URI, localPart = "unloadFromStarshipRequest")
+    void unloadFromSpaceship(@RequestPayload UnloadFromStarshipRequest request) {
+        starshipService.unloadAllFromStarship(request.getStarshipId());
     }
 
-    @ResponseStatus(HttpStatus.NOT_FOUND)
-    @ExceptionHandler({StarshipNotFoundException.class})
-    public ErrorResponse handleException(StarshipNotFoundException exception) {
-        return new ErrorResponse(exception.getMessage(), "not.found.starship");
-    }
-
-    @ResponseStatus(HttpStatus.NOT_FOUND)
-    @ExceptionHandler({MarineNotFoundException.class})
-    public ErrorResponse handleException(MarineNotFoundException exception) {
-        return new ErrorResponse(exception.getMessage(), "not.found.marine");
+    private StarshipDto mapToStarshipDto(Starship starship) {
+        var starshipDto = new StarshipDto();
+        starshipDto.setId(starship.id());
+        starshipDto.setName(starship.name());
+        starshipDto.getMarines().addAll(starship.marines().stream().map(el -> {
+            var marine = new SpaceMarineDto();
+            marine.setId(el.id());
+            marine.setName(el.name());
+            marine.setCategory(AstartesCategory.fromValue(el.category().toString()));
+            marine.setHealth(el.health());
+            return marine;
+        }).toList());
+        return starshipDto;
     }
 }
