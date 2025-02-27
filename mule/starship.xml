@@ -1,0 +1,582 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:tls="http://www.mulesoft.org/schema/mule/tls" xmlns:wsc="http://www.mulesoft.org/schema/mule/wsc"
+	xmlns:jms="http://www.mulesoft.org/schema/mule/jms"
+	xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/jms http://www.mulesoft.org/schema/mule/jms/current/mule-jms.xsd
+http://www.mulesoft.org/schema/mule/wsc http://www.mulesoft.org/schema/mule/wsc/current/mule-wsc.xsd
+http://www.mulesoft.org/schema/mule/tls http://www.mulesoft.org/schema/mule/tls/current/mule-tls.xsd">
+	<http:listener-config name="HTTP_Listener_config" doc:name="HTTP Listener config" doc:id="962b0e16-111d-4915-844d-8bc5ed052415" >
+		<http:listener-connection host="0.0.0.0" port="8081" protocol="HTTPS">
+			<tls:context >
+				<tls:key-store type="jks" path="/Users/masasdf/source/itmo/soa/spaceship-service/src/main/resources/keystore/keystore.jks" alias="selfsigned" keyPassword="12345678" password="12345678" />
+			</tls:context>
+		</http:listener-connection>
+	</http:listener-config>
+	<wsc:config name="Web_Service_Consumer_Config" doc:name="Web Service Consumer Config" doc:id="f91d8572-05b5-41cc-8a4a-6f3abd3cf44d" >
+		<wsc:connection wsdlLocation="https://localhost:8443/starships/ws/schema.wsdl" address="https://localhost:8443/starships/ws" service="SchemaPortService" port="SchemaPortSoap11">
+			<wsc:web-service-security actor="http://schemas.xmlsoap.org/soap/actor/next" />
+		</wsc:connection>
+	</wsc:config>
+	<flow name="getStarshipsRequest" doc:id="b9f85a3d-0d98-4cbd-beed-12a406e2c088" >
+		<http:listener doc:name="Listener" doc:id="6b38652a-6314-431b-8942-e0148f4d5961" config-ref="HTTP_Listener_config" path="/starships" allowedMethods="GET">
+			<http:response >
+				<http:headers ><![CDATA[#[output application/java
+---
+{
+	"Access-Control-Allow-Origin" : "*",
+	"Access-Control-Allow-Methods" : "GET, PUT, POST, DELETE, HEAD, OPTIONS, PATCH",
+	"Access-Control-Allow-Headers" : "*",
+	"Access-Control-Allow-Credentials" : "true"
+}]]]></http:headers>
+			</http:response>
+			<http:error-response statusCode="#[payload.code default 500]">
+				<http:body ><![CDATA[#[{
+	message: payload.message
+}]]]></http:body>
+				<http:headers ><![CDATA[#[output application/java
+---
+{
+	"Access-Control-Allow-Origin" : "*",
+	"Access-Control-Allow-Methods" : "GET, PUT, POST, DELETE, HEAD, OPTIONS",
+	"Access-Control-Allow-Headers" : "*",
+	"Access-Control-Allow-Credentials" : "true"
+}]]]></http:headers>
+			</http:error-response>
+		</http:listener>
+		<ee:transform doc:name="Transform Message" doc:id="c36b3ebd-9cc6-4ecc-bf32-0f2027d12c17" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output text/xml
+ns ent0 http://itmo/starshipservice
+---
+{
+    ent0#getStarshipsRequest: {}
+}
+]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<logger level="INFO" doc:name="Logger" doc:id="3c16ce3f-bfb5-4a31-b89e-04fc6e7ca767" message="Sending SOAP Request: #[payload]"/>
+		<wsc:consume doc:name="Consume" doc:id="1d22ef41-df73-4d95-948f-a6fc96a91715" config-ref="Web_Service_Consumer_Config" operation="getStarships"/>
+		<logger level="INFO" doc:name="Logger" doc:id="340ae49c-3d37-4042-919d-c94d259cbc89" message="Recieve SOAP response: #[payload]"/>
+		<ee:transform doc:name="Transform Message" doc:id="dd52e3c6-77f5-4039-aa45-3568cc272466" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+ns ns2 http://itmo/starshipservice
+---
+payload.body.getStarshipsResponse.*ns2#starships map (starship)-> {
+	id: starship.ns2#id as Number,
+    name: starship.ns2#name,
+    marines: starship.*ns2#marines map (marine)-> {
+    	id: marine.ns2#id as Number, 
+    	name: marine.ns2#name,
+    	category: marine.ns2#category,
+    	health: marine.ns2#health as Number,
+    }
+}
+]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<error-handler >
+			<on-error-propagate enableNotifications="true" logException="true" doc:name="On Error Propagate" doc:id="5ef9d940-1263-4481-a4c6-55b0217e7a1f" >
+				<ee:transform doc:name="Transform Message" doc:id="d6bebd40-8fcf-4f3f-a628-8ce62dcfa2fb" >
+					<ee:message >
+						<ee:set-payload ><![CDATA[output application/json
+
+var detail = read(error.exception.cause.detail, "application/xml")
+---
+{
+	"code": detail.detail.code,
+	"message": detail.detail.description
+}
+]]></ee:set-payload>
+					</ee:message>
+				</ee:transform>
+				<logger level="INFO" doc:name="Logger" doc:id="02a1bc99-15f2-4b81-aa7e-b7d8103505b2" />
+			</on-error-propagate>
+		</error-handler>
+	</flow>
+	<flow name="addStarshipRequest" doc:id="a366ebce-a7cb-4265-a61c-e4f8639a8491" >
+		<http:listener doc:name="Listener" doc:id="b8b580d6-9b44-466c-85e0-6a23f2b9a4c0" config-ref="HTTP_Listener_config" path="/starships" allowedMethods="POST">
+			<http:response >
+				<http:headers ><![CDATA[#[output application/java
+---
+{
+	"Access-Control-Allow-Origin" : "*",
+	"Access-Control-Allow-Methods" : "GET, PUT, POST, DELETE, HEAD, OPTIONS, PATCH",
+	"Access-Control-Allow-Headers" : "*",
+	"Access-Control-Allow-Credentials" : "true"
+}]]]></http:headers>
+			</http:response>
+			<http:error-response statusCode="#[payload.code default 500]" >
+				<http:body ><![CDATA[#[{
+	message: payload.message
+}]]]></http:body>
+				<http:headers ><![CDATA[#[output application/java
+---
+{
+	"Access-Control-Allow-Origin" : "*",
+	"Access-Control-Allow-Methods" : "GET, PUT, POST, DELETE, HEAD, OPTIONS",
+	"Access-Control-Allow-Headers" : "*",
+	"Access-Control-Allow-Credentials" : "true"
+}]]]></http:headers>
+			</http:error-response>
+		</http:listener>
+		<ee:transform doc:name="Transform Message" doc:id="9e4904ea-3311-483e-a7f7-05d85f10fcd9" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output text/xml
+ns ent0 http://itmo/starshipservice
+---
+{
+    ent0#addStarshipRequest: {
+    	ent0#name: payload.name,
+    }
+}
+]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<logger level="INFO" doc:name="Logger" doc:id="c5a48064-76da-4e12-b95c-03386816ab4a" message="Sending SOAP Request: #[payload]" />
+		<wsc:consume operation="ElementCreated" doc:name="Consume" doc:id="f58c48f6-8831-4ebc-b3fe-91e4105c2def" config-ref="Web_Service_Consumer_Config" />
+		<logger level="INFO" doc:name="Logger" doc:id="6dfc0e17-226a-4e4e-9f99-26d9f785fbd3" message="Recieve SOAP response: #[payload]" />
+		<ee:transform doc:name="Transform Message" doc:id="f465b128-2025-4ce5-b1ed-bcb5075d5c38" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+ns ns2 http://itmo/starshipservice
+---
+{
+	id: payload.body.ElementCreatedResponse.id as Number
+}
+]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<error-handler >
+			<on-error-propagate enableNotifications="true" logException="true" doc:name="On Error Propagate" doc:id="42feacd4-87b3-46bd-8a9c-f655daf1d360" type="ANY" >
+				<ee:transform doc:name="Transform Message" doc:id="d0d4f8f2-825d-43a2-905c-2004b974ade7" >
+					<ee:message >
+						<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+
+var detail = read(error.exception.cause.detail, "application/xml")
+---
+{
+	"code": detail.detail.code as Number,
+	"message": detail.detail.message
+}]]></ee:set-payload>
+					</ee:message>
+				</ee:transform>
+				<logger level="INFO" doc:name="Logger" doc:id="1297bba1-fb60-4f1d-9bf5-0e2ea219a701" message="Recieve SOAP error response: #[payload]" />
+			</on-error-propagate>
+		</error-handler>
+	</flow>
+	<flow name="deleteStarshipRequest" doc:id="22bd19f1-154b-4794-ab89-f57f0968978f">
+		<http:listener doc:name="Listener" doc:id="4e4b120d-295a-4bac-b610-97311ab8c20e" config-ref="HTTP_Listener_config" path="/starships/{id}" allowedMethods="DELETE">
+			<http:response >
+				<http:headers ><![CDATA[#[output application/java
+---
+{
+	"Access-Control-Allow-Origin" : "http://localhost:3000",
+	"Access-Control-Allow-Methods" : "GET, PUT, POST, DELETE, HEAD, OPTIONS, PATCH",
+	"Access-Control-Allow-Headers" : "*",
+	"Access-Control-Allow-Credentials" : "true"
+}]]]></http:headers>
+			</http:response>
+			<http:error-response statusCode="#[payload.code default 500]">
+				<http:body><![CDATA[#[{
+	message: payload.message
+}]]]></http:body>
+				<http:headers ><![CDATA[#[output application/java
+---
+{
+	"Access-Control-Allow-Origin" : "*",
+	"Access-Control-Allow-Methods" : "*",
+	"Access-Control-Allow-Headers" : "*",
+	"Access-Control-Allow-Credentials" : "true"
+}]]]></http:headers>
+			</http:error-response>
+		</http:listener>
+		<ee:transform doc:name="Transform Message" doc:id="2e951bb1-eb27-43f3-8323-2b8f54a0c6c1">
+			<ee:message>
+				<ee:set-payload><![CDATA[%dw 2.0
+output text/xml
+ns ent0 http://itmo/starshipservice
+---
+{
+    ent0#deleteStarshipRequest: {
+    	ent0#id: attributes.uriParams.id
+    }
+}
+]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<logger level="INFO" doc:name="Logger" doc:id="0130ecba-6eb5-4fe5-992b-e221de1551f6" message="Sending SOAP Request: #[payload]" />
+		<wsc:consume operation="deleteStarship" doc:name="Consume" doc:id="cea1ca80-6606-45a5-80c2-7d89b29fe4cf" config-ref="Web_Service_Consumer_Config" />
+		<logger level="INFO" doc:name="Logger" doc:id="210f7b61-2cbf-49fb-99af-b8e5e098afef" message="Recieve SOAP response: #[payload]" />
+		<ee:transform doc:name="Transform Message" doc:id="95b4183a-6c90-4490-a952-4092e2d9deb6">
+			<ee:message>
+				<ee:set-payload><![CDATA[%dw 2.0
+output application/json
+ns ns2 http://itmo/starshipservice
+---
+
+{}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<error-handler>
+			<on-error-propagate enableNotifications="true" logException="true" doc:name="On Error Propagate" doc:id="497a397d-506e-407b-84e3-b1d0426c4829" type="ANY">
+				<ee:transform doc:name="Transform Message" doc:id="2fef4da8-4a21-42e5-98aa-eafd83ebd4db">
+					<ee:message>
+						<ee:set-payload><![CDATA[%dw 2.0
+output application/json
+
+var detail = read(error.exception.cause.detail, "application/xml")
+---
+{
+	"code": detail.detail.code as Number,
+	"message": detail.detail.message
+}]]></ee:set-payload>
+					</ee:message>
+				</ee:transform>
+				<logger level="INFO" doc:name="Logger" doc:id="7a389119-dd62-4b84-87e9-474ab1ab0a26" message="Recieve SOAP error response: #[payload]" />
+			</on-error-propagate>
+		</error-handler>
+	</flow>
+	<flow name="updateStarshipRequest" doc:id="b72c5af8-3e68-4b4c-8ff4-8468037323b1">
+		<http:listener doc:name="Listener" doc:id="29c386f9-6d2c-4906-bdc3-5b1cbc1f4730" config-ref="HTTP_Listener_config" path="/starships/{id}" allowedMethods="PUT">
+			<http:response >
+				<http:headers ><![CDATA[#[output application/java
+---
+{
+	"Access-Control-Allow-Origin" : "*",
+	"Access-Control-Allow-Methods" : "GET, PUT, POST, DELETE, HEAD, OPTIONS, PATCH",
+	"Access-Control-Allow-Headers" : "*",
+	"Access-Control-Allow-Credentials" : "true"
+}]]]></http:headers>
+			</http:response>
+			<http:error-response statusCode="#[payload.code default 500]">
+				<http:body><![CDATA[#[{
+	message: payload.message
+}]]]></http:body>
+				<http:headers ><![CDATA[#[output application/java
+---
+{
+	"Access-Control-Allow-Origin" : "*",
+	"Access-Control-Allow-Methods" : "GET, PUT, POST, DELETE, HEAD, OPTIONS, PATCH",
+	"Access-Control-Allow-Headers" : "*",
+	"Access-Control-Allow-Credentials" : "true"
+}]]]></http:headers>
+			</http:error-response>
+		</http:listener>
+		<ee:transform doc:name="Transform Message" doc:id="dc677338-7f81-4f08-bc03-b8902563e257">
+			<ee:message>
+				<ee:set-payload><![CDATA[%dw 2.0
+output text/xml
+ns ent0 http://itmo/starshipservice
+---
+{
+    ent0#updateStarshipRequest: {
+    	ent0#id: attributes.uriParams.id,
+    	ent0#name: payload.name
+    }
+}
+]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<logger level="INFO" doc:name="Logger" doc:id="3efe4532-f8d9-4a6d-8c61-b85124699073" message="Sending SOAP Request: #[payload]" />
+		<wsc:consume operation="getStarship" doc:name="Consume" doc:id="c575fc96-5ef4-4931-89eb-921382df8d64" config-ref="Web_Service_Consumer_Config" />
+		<logger level="INFO" doc:name="Logger" doc:id="e39b47e2-d1a7-4204-b641-2eecfa8e69dd" message="Recieve SOAP response: #[payload]" />
+		<ee:transform doc:name="Transform Message" doc:id="bc055811-1781-42c4-ac87-4291d878fe3b">
+			<ee:message>
+				<ee:set-payload><![CDATA[%dw 2.0
+output application/json
+ns ns2 http://itmo/starshipservice
+---
+{
+	id: payload.body.getStarshipResponse.starship.id as Number,
+    name: payload.body.getStarshipResponse.starship.name,
+    marines: payload.body.getStarshipResponse.starship.*marines map (marine)-> {
+    	id: marine.ns2#id as Number, 
+    	name: marine.ns2#name,
+    	category: marine.ns2#category,
+    	health: marine.ns2#health as Number,
+    }
+}
+]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<error-handler>
+			<on-error-propagate enableNotifications="true" logException="true" doc:name="On Error Propagate" doc:id="10dcd2a1-9f26-45b5-8c39-eb74fc789b7d" type="ANY">
+				<ee:transform doc:name="Transform Message" doc:id="653700a2-9240-46c1-8c00-f1a83beecb2f">
+					<ee:message>
+						<ee:set-payload><![CDATA[%dw 2.0
+output application/json
+
+var detail = read(error.exception.cause.detail, "application/xml")
+---
+{
+	"code": detail.detail.code as Number,
+	"message": detail.detail.message
+}]]></ee:set-payload>
+					</ee:message>
+				</ee:transform>
+				<logger level="INFO" doc:name="Logger" doc:id="ea298ce3-668f-4b9b-841e-bba9d6786212" message="Recieve SOAP error response: #[payload]" />
+			</on-error-propagate>
+		</error-handler>
+	</flow>
+	<flow name="loadToStarshipRequest" doc:id="6c47d252-d37a-40c1-982d-e29c3f054576">
+		<http:listener doc:name="Listener" doc:id="386e0cf3-5765-44ec-9949-9a199b042dd1" config-ref="HTTP_Listener_config" path="/starships/{starship-id}/load/{space-marine-id}" allowedMethods="PATCH">
+			<http:response >
+				<http:headers ><![CDATA[#[output application/java
+---
+{
+	"Access-Control-Allow-Origin" : "*",
+	"Access-Control-Allow-Methods" : "GET, PUT, POST, DELETE, HEAD, OPTIONS, PATCH",
+	"Access-Control-Allow-Headers" : "*",
+	"Access-Control-Allow-Credentials" : "true"
+}]]]></http:headers>
+			</http:response>
+			<http:error-response statusCode="#[payload.code default 500]">
+				<http:body><![CDATA[#[{
+	message: payload.message
+}]]]></http:body>
+				<http:headers ><![CDATA[#[output application/java
+---
+{
+	"Access-Control-Allow-Origin" : "*",
+	"Access-Control-Allow-Methods" : "GET, PUT, POST, DELETE, HEAD, OPTIONS, PATCH",
+	"Access-Control-Allow-Headers" : "*",
+	"Access-Control-Allow-Credentials" : "true"
+}]]]></http:headers>
+			</http:error-response>
+		</http:listener>
+		<ee:transform doc:name="Transform Message" doc:id="b9910776-1b0d-4f92-803c-b1044aba7654">
+			<ee:message>
+				<ee:set-payload><![CDATA[%dw 2.0
+output text/xml
+ns ent0 http://itmo/starshipservice
+---
+{
+    ent0#loadToStarshipRequest: {
+    	ent0#starshipId: attributes.uriParams.'starship-id',
+    	ent0#spaceMarineId: attributes.uriParams.'space-marine-id'
+    }
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<logger level="INFO" doc:name="Logger" doc:id="a02dbfee-03eb-47de-a761-4ee421e04e75" message="Sending SOAP Request: #[payload]" />
+		<wsc:consume operation="loadToStarship" doc:name="Consume" doc:id="f033e60a-e9ab-4981-93f6-149aabc960c8" config-ref="Web_Service_Consumer_Config" />
+		<logger level="INFO" doc:name="Logger" doc:id="fb345758-0e38-4fa5-abe4-d92c3a5c334a" message="Recieve SOAP response: #[payload]" />
+		<ee:transform doc:name="Transform Message" doc:id="22f1e5c6-0005-4677-8c06-eddfc63fdcca">
+			<ee:message>
+				<ee:set-payload><![CDATA[%dw 2.0
+output application/json
+ns ns2 http://itmo/starshipservice
+---
+{}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<error-handler>
+			<on-error-propagate enableNotifications="true" logException="true" doc:name="On Error Propagate" doc:id="d10518bf-cf28-4221-842e-2d8c94929b35" type="ANY">
+				<ee:transform doc:name="Transform Message" doc:id="1e9a6600-73be-4c81-84e2-a66fac750ff9">
+					<ee:message>
+						<ee:set-payload><![CDATA[%dw 2.0
+output application/json
+
+var detail = read(error.exception.cause.detail, "application/xml")
+---
+{
+	"code": detail.detail.code as Number,
+	"message": detail.detail.message
+}]]></ee:set-payload>
+					</ee:message>
+				</ee:transform>
+				<logger level="INFO" doc:name="Logger" doc:id="e2729a9c-598e-437b-b0f6-32dc7c24325d" message="Recieve SOAP error response: #[payload]" />
+			</on-error-propagate>
+		</error-handler>
+	</flow>
+	<flow name="unloadFromStarshipRequest" doc:id="fce35d12-f478-4481-b6f1-341aa20ddf87" >
+		<http:listener doc:name="Listener" doc:id="040c96d0-73c9-4ce2-b837-1d688b1230f7" config-ref="HTTP_Listener_config" path="/starships/{starship-id}/unload-all" allowedMethods="PATCH">
+			<http:response >
+				<http:headers ><![CDATA[#[output application/java
+---
+{
+	"Access-Control-Allow-Origin" : "*",
+	"Access-Control-Allow-Methods" : "GET, PUT, POST, DELETE, HEAD, OPTIONS, PATCH",
+	"Access-Control-Allow-Headers" : "*",
+	"Access-Control-Allow-Credentials" : "true"
+}]]]></http:headers>
+			</http:response>
+			<http:error-response statusCode="#[payload.code default 500]" >
+				<http:body ><![CDATA[#[{
+	message: payload.message
+}]]]></http:body>
+				<http:headers ><![CDATA[#[output application/java
+---
+{
+	"Access-Control-Allow-Origin" : "*",
+	"Access-Control-Allow-Methods" : "GET, PUT, POST, DELETE, HEAD, OPTIONS",
+	"Access-Control-Allow-Headers" : "*",
+	"Access-Control-Allow-Credentials" : "true"
+}]]]></http:headers>
+			</http:error-response>
+		</http:listener>
+		<ee:transform doc:name="Transform Message" doc:id="f2e928c1-6eba-4783-af0d-65d5dbaf326d" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output text/xml
+ns ent0 http://itmo/starshipservice
+---
+{
+    ent0#unloadFromStarshipRequest: {
+    	ent0#starshipId: attributes.uriParams.'starship-id'
+    }
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<logger level="INFO" doc:name="Logger" doc:id="2d2d6960-bc6b-44f2-b6e3-519d32495fda" message="Sending SOAP Request: #[payload]" />
+		<wsc:consume operation="unloadFromStarship" doc:name="Consume" doc:id="1eab0f32-e51b-4caf-affb-3c1a0d316b33" config-ref="Web_Service_Consumer_Config" />
+		<logger level="INFO" doc:name="Logger" doc:id="25483ac7-dae5-4786-836f-3f62c8f3a2e9" message="Recieve SOAP response: #[payload]" />
+		<ee:transform doc:name="Transform Message" doc:id="f14c1e3d-dd1d-4370-be25-12257678060e" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+ns ns2 http://itmo/starshipservice
+---
+{}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<error-handler >
+			<on-error-propagate enableNotifications="true" logException="true" doc:name="On Error Propagate" doc:id="1949fc80-3fdd-4b94-a2e9-6ecb02c7a68d" type="ANY" >
+				<ee:transform doc:name="Transform Message" doc:id="c677ba1d-05df-446b-a406-c1eac6a4177f" >
+					<ee:message >
+						<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+
+var detail = read(error.exception.cause.detail, "application/xml")
+---
+{
+	"code": detail.detail.code as Number,
+	"message": detail.detail.message
+}]]></ee:set-payload>
+					</ee:message>
+				</ee:transform>
+				<logger level="INFO" doc:name="Logger" doc:id="f07f91eb-5546-412e-a89c-d72dcca0d7ad" message="Recieve SOAP error response: #[payload]" />
+			</on-error-propagate>
+		</error-handler>
+	</flow>
+	<flow name="addStarshipRequestOptional" doc:id="1ebf3bb8-28c9-40dd-b490-3f4ae92ed279">
+		<http:listener doc:name="Listener" doc:id="7d96c0f9-1656-4195-8b4c-89f8d50678c3" config-ref="HTTP_Listener_config" path="/starships" allowedMethods="OPTIONS">
+			<http:response statusCode="200">
+				<http:headers><![CDATA[#[output application/java
+---
+{
+	"Access-Control-Allow-Origin" : "*",
+	"Access-Control-Allow-Methods" : "*",
+	"Access-Control-Allow-Headers" : "*",
+	"Access-Control-Allow-Credentials" : "true"
+}]]]></http:headers>
+			</http:response>
+			<http:error-response statusCode="#[500]">
+				<http:headers><![CDATA[#[output application/java
+---
+{
+	"Access-Control-Allow-Origin" : "*",
+	"Access-Control-Allow-Methods" : "*",
+	"Access-Control-Allow-Headers" : "*",
+	"Access-Control-Allow-Credentials" : "true"
+}]]]></http:headers>
+			</http:error-response>
+		</http:listener>
+		<logger level="INFO" doc:name="Logger" doc:id="f3248e81-0491-4d25-935a-597a338aeb0e" message="check"/>
+		<error-handler>
+			<on-error-propagate enableNotifications="true" logException="true" doc:name="On Error Propagate" doc:id="f23bf9e9-2781-4c7e-a915-e1591632d7ea" type="ANY">
+				<logger level="INFO" doc:name="Logger" doc:id="8800d2d3-278f-48d5-ae47-11274ea3c305" />
+			</on-error-propagate>
+		</error-handler>
+	</flow>
+	<flow name="getStarshipRequest" doc:id="d1ef3fff-a44c-4bba-a2ac-5d31d51cdf38" >
+		<http:listener doc:name="Listener" doc:id="8c02255c-4a12-4915-8599-16ac90c5968e" config-ref="HTTP_Listener_config" path="/starships/{id}" allowedMethods="GET" >
+			<http:response >
+				<http:headers ><![CDATA[#[output application/java
+---
+{
+	"Access-Control-Allow-Origin" : "*",
+	"Access-Control-Allow-Methods" : "GET, PUT, POST, DELETE, HEAD, OPTIONS, PATCH",
+	"Access-Control-Allow-Headers" : "*",
+	"Access-Control-Allow-Credentials" : "true"
+}]]]></http:headers>
+			</http:response>
+			<http:error-response statusCode="#[payload.code default 500]" >
+				<http:body ><![CDATA[#[{
+	message: payload.message
+}]]]></http:body>
+				<http:headers ><![CDATA[#[output application/java
+---
+{
+	"Access-Control-Allow-Origin" : "*",
+	"Access-Control-Allow-Methods" : "GET, PUT, POST, DELETE, HEAD, OPTIONS",
+	"Access-Control-Allow-Headers" : "*",
+	"Access-Control-Allow-Credentials" : "true"
+}]]]></http:headers>
+			</http:error-response>
+		</http:listener>
+		<ee:transform doc:name="Transform Message" doc:id="59227bff-80c6-46c4-93a0-237967231312" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output text/xml
+ns ent0 http://itmo/starshipservice
+---
+{
+    ent0#getStarshipRequest: {
+    	ent0#id: attributes.uriParams.id
+    }
+}
+]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<logger level="INFO" doc:name="Logger" doc:id="c8fa2e86-af82-4e99-b658-d77fe1f12d5b" message="Sending SOAP Request: #[payload]" />
+		<wsc:consume doc:name="Consume" doc:id="8ea3c44f-2eb3-4d95-9e91-c2993d10a0ab" config-ref="Web_Service_Consumer_Config" operation="getStarship"/>
+		<logger level="INFO" doc:name="Logger" doc:id="e2731d9d-c478-42d7-9226-34475d293a21" message="Recieve SOAP response: #[payload]" />
+		<ee:transform doc:name="Transform Message" doc:id="b271d92b-79e1-4853-9099-13258f84880a" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+ns ns2 http://itmo/starshipservice
+---
+{
+	id: payload.body.getStarshipResponse.starship.id as Number,
+    name: payload.body.getStarshipResponse.starship.name,
+    marines: payload.body.getStarshipResponse.starship.*marines map (marine)-> {
+    	id: marine.ns2#id as Number, 
+    	name: marine.ns2#name,
+    	category: marine.ns2#category,
+    	health: marine.ns2#health as Number,
+    }
+}
+]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<error-handler >
+			<on-error-propagate enableNotifications="true" logException="true" doc:name="On Error Propagate" doc:id="3880148c-375c-4f11-bb5d-788e7bf4afbb" >
+				<ee:transform doc:name="Transform Message" doc:id="af9c2405-2bee-4b4b-a6ab-748a51cd56f1" >
+					<ee:message >
+						<ee:set-payload ><![CDATA[output application/json
+
+var detail = read(error.exception.cause.detail, "application/xml")
+---
+{
+	"code": detail.detail.code,
+	"message": detail.detail.message
+}
+]]></ee:set-payload>
+					</ee:message>
+				</ee:transform>
+				<logger level="INFO" doc:name="Logger" doc:id="430ee96b-9d63-4e6a-b32e-7461a7c37db1" />
+			</on-error-propagate>
+		</error-handler>
+	</flow>
+</mule>
